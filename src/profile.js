@@ -35,6 +35,8 @@ onAuthReady(async function (user) {
     fields.forEach((field) => {
       document.getElementById(field + "Input").value = data[field] || "";
     });
+    // 4. NOW favourites is filled, so draw the cards
+    displayFavourites();
   }
 });
 
@@ -88,3 +90,61 @@ async function saveProfile(event) {
 
 // ---- (2) Connect it to the form ----
 document.getElementById("profileForm").addEventListener("submit", saveProfile);
+
+// ---- Favourite hikes ----
+async function displayFavourites() {
+  const container = document.getElementById("hikes-go-here");
+  const cardTemplate = document.getElementById("hikeCardTemplate");
+
+  if (favourites.length === 0) {
+    container.innerHTML =
+      "<p class='text-muted'>You haven't favourited any hikes yet. Go find some!</p>";
+    return;
+  }
+
+  // Fetch exactly those hikes in ONE query
+  const q = query(
+    collection(db, "hikes"),
+    where(documentId(), "in", favourites),
+  );
+  const querySnapshot = await getDocs(q);
+
+  // Same card loop as main.js
+  querySnapshot.forEach((doc) => {
+    let newcard = cardTemplate.content.cloneNode(true);
+    const hike = doc.data();
+
+    newcard.querySelector(".card-title").textContent = hike.name;
+    newcard.querySelector(".card-text").textContent =
+      hike.details || `Located in ${hike.city}.`;
+    newcard.querySelector(".card-length").textContent = hike.length;
+    newcard.querySelector(".card-image").src = `./images/${hike.code}.jpg`;
+    newcard.querySelector(".read-more").href = `eachHike.html?docID=${doc.id}`;
+    setupHeart(newcard, doc.id); // ← needs (b) below
+
+    container.appendChild(newcard);
+  });
+}
+
+// Makes one card's heart work: filled if already a favourite, click to add or remove
+function setupHeart(card, hikeID) {
+  const heart = card.querySelector(".fav-btn");
+  if (favourites.includes(hikeID)) {
+    heart.classList.replace("bi-heart", "bi-heart-fill");
+  }
+  heart.addEventListener("click", function () {
+    toggleFavourite(heart, hikeID);
+  });
+}
+
+// Add or remove this hike from the user's favourites, and swap the icon
+async function toggleFavourite(heart, hikeID) {
+  const userRef = doc(db, "users", currentUser.uid);
+  if (heart.classList.contains("bi-heart-fill")) {
+    await setDoc(userRef, { favourites: arrayRemove(hikeID) }, { merge: true });
+    heart.classList.replace("bi-heart-fill", "bi-heart");
+  } else {
+    await setDoc(userRef, { favourites: arrayUnion(hikeID) }, { merge: true });
+    heart.classList.replace("bi-heart", "bi-heart-fill");
+  }
+}
